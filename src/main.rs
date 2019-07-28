@@ -261,11 +261,7 @@ fn main() -> Result<(), Box<std::error::Error>> {
     let arg = format!("{} {} | bzip2 > {}", v.join(" "), extra_args, remote_temp_file);
 
     eprint!("Exporting database on target server...");
-    let mut channel = sess.channel_session().unwrap_or_else(|err| {
-        eprintln!("Failed to export database - {}", err);
-        process::exit(4);
-    });
-
+    let mut channel = sess.channel_session().ok().unwrap();
     let exit_status = channel.exec(&arg)
         .and_then(|_| channel.close())
         // .and_then(|_| channel.wait_close())
@@ -307,12 +303,26 @@ fn main() -> Result<(), Box<std::error::Error>> {
     match copy(&mut remote_file, &mut target) {
         Ok(_) => (),
         Err(err) => {
-            eprintln!("Failed to copy exported database dump - {}", err);
+            eprintln!("Failed to download exported database dump - {}", err);
             process::exit(3);
         }
     }
+
     progressbar.finish_and_clear();
     println!("Downloading database dump...OK");
+
+    let mut channel = sess.channel_session().ok().unwrap();
+    let arg = format!("rm -f {}", remote_temp_file);
+    let exit_status = channel.exec(&arg)
+        .and_then(|_| channel.close())
+        .and_then(|_| channel.exit_status());
+
+    match exit_status {
+        Ok(0) => eprintln!("Removed temporary file from remote filesystem...OK"),
+        _ => eprintln!("Failed to delete temporary file from remote filesystem"),
+    }
+
+    // TODO: Delete temporary file from remote filesystem
 
     let f = BufReader::new(File::open(&path).unwrap());
 
