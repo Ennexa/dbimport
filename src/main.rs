@@ -12,7 +12,7 @@ use std::net::TcpStream;
 use ssh2::Session;
 use std::io::{copy,BufReader,BufWriter,Read};
 use std::path::Path;
-use std::fs::File;
+use std::fs::{self,File};
 use tempfile::Builder;
 use bzip2::read::BzDecoder;
 use std::process::{Command, Stdio};
@@ -85,7 +85,7 @@ impl Config {
         }
     }
 
-    fn parse_config_file(path: &str, host: &str) -> Result<Config, Box<Error>> {
+    fn parse_config_file(path: &str, host: &str) -> Result<Config, Box<dyn Error>> {
         let f = std::fs::File::open(path)?;
         let mut config: HashMap<String, Config> = serde_yaml::from_reader(f)?;
         match config.remove(host) {
@@ -95,7 +95,7 @@ impl Config {
     }
 }
 
-fn main() -> Result<(), Box<std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("Database Importer")
         .about("Import database from remote server")
         .arg(Arg::with_name("database")
@@ -363,6 +363,8 @@ fn main() -> Result<(), Box<std::error::Error>> {
             process::exit(5);
         }
     };
+
+    fs::remove_file(path)?;
 
     match result {
         Some(0) => (),
