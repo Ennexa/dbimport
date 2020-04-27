@@ -210,7 +210,8 @@ fn main() -> Result<(), Box<std::error::Error>> {
     });
 
     let mut sess = Session::new().unwrap();
-    sess.handshake(&tcp).expect("SSH handshake failed");
+	sess.set_tcp_stream(tcp);
+    sess.handshake().expect("SSH handshake failed");
 
     // Try to authenticate with the first identity in the agent.
     eprint!("Attept to authenticate with ssh-agent...");
