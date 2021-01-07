@@ -11,7 +11,7 @@ dbimport ssh_user@ssh_host.com -d db_name -u db_user -p db_pass table1 table2
 
 ### Configuration
 
-The server details can be loaded from a config file.
+The server details can be loaded from a config file. The default location of the config file is `$HOME/.config/dbimport.yml`.
 
 ```
 server:
