@@ -20,6 +20,8 @@ serde_yaml = "0.8.24"
 serde_json = "1.0.81"
 serde = { version = "1.0", features = ["derive"] }
 dirs = "4.0.0"
+# openssl = { version = "=0.10.40", features = ["vendored"] }
+libz-sys = { version = "1.1.0", default-features = false, features = ["libc"] }
 
 [profile.release]
 lto = true
