@@ -5,7 +5,7 @@ extern crate rpassword;
 extern crate shell_escape;
 extern crate ctrlc;
 
-use clap::{Arg, App};
+use clap::{Arg, Command as App};
 use regex::Regex;
 use std::process;
 use std::net::TcpStream;
@@ -98,28 +98,28 @@ impl Config {
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("Database Importer")
         .about("Import database from remote server")
-        .arg(Arg::with_name("database")
-           .short("d")
+        .arg(Arg::new("database")
+           .short('d')
            .long("database")
            .help("Target Database")
            .takes_value(true))
-        .arg(Arg::with_name("out_file")
-           .short("o")
+        .arg(Arg::new("out_file")
+           .short('o')
            .long("out_file")
            .help("Output file path")
            .takes_value(true))
-        .arg(Arg::with_name("dbuser")
-            .short("u")
+        .arg(Arg::new("dbuser")
+            .short('u')
               .long("user")
             .help("Database username")
             .takes_value(true))
-        .arg(Arg::with_name("dbpass")
-            .short("p")
+        .arg(Arg::new("dbpass")
+            .short('p')
               .long("password")
             .help("Database password")
             .takes_value(true))
-        .arg(Arg::with_name("extra_args")
-            .short("x")
+        .arg(Arg::new("extra_args")
+            .short('x')
               .long("extra-args")
               .allow_hyphen_values(true)
             .help("Extra arguments to be passed to mysqldump")
@@ -129,13 +129,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         //     .help("dump mode (for remote)")
         //     .required(false)
         //     .takes_value(false))
-        .arg(Arg::with_name("host")
+        .arg(Arg::new("host")
             .value_name("user@hostname")
             .help("SSH Destination")
             .takes_value(true)
             .required(true))
-        .arg(Arg::with_name("table")
-            .multiple(true)
+        .arg(Arg::new("table")
+            .multiple_values(true)
             .required(true))
         .get_matches();
 
