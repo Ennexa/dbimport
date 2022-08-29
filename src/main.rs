@@ -1,24 +1,24 @@
 extern crate clap;
+extern crate ctrlc;
 extern crate regex;
-extern crate ssh2;
 extern crate rpassword;
 extern crate shell_escape;
-extern crate ctrlc;
+extern crate ssh2;
 
+use bzip2::read::BzDecoder;
 use clap::{Arg, Command as App};
 use regex::Regex;
-use std::process;
-use std::net::TcpStream;
+use serde::{Deserialize, Serialize};
 use ssh2::Session;
-use std::io::{copy,BufReader,BufWriter,Read};
-use std::path::Path;
-use std::fs::{self,File};
-use tempfile::Builder;
-use bzip2::read::BzDecoder;
-use std::process::{Command, Stdio};
-use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs::{self, File};
+use std::io::{copy, BufReader, BufWriter, Read};
+use std::net::TcpStream;
+use std::path::Path;
+use std::process;
+use std::process::{Command, Stdio};
+use tempfile::Builder;
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 struct Config {
@@ -33,7 +33,7 @@ struct Config {
 
 impl Config {
     pub fn default_port() -> String {
-        return "22".to_string()
+        return "22".to_string();
     }
     pub fn load(host: &str) -> Config {
         let config_file = dirs::home_dir().unwrap().join(".config/dbimport.yml");
@@ -41,12 +41,15 @@ impl Config {
         let re = Regex::new(r"^(?:([a-z0-9-]+)@)?([a-z0-9_.-]+)(?::(\d+))?$").unwrap();
         let cap = re.captures(host).unwrap();
 
-        let ssh_host = cap.get(2).unwrap_or_else(|| {
-            eprintln!("Failed to parse ssh host");
-            process::exit(1);
-        }).as_str();
+        let ssh_host = cap
+            .get(2)
+            .unwrap_or_else(|| {
+                eprintln!("Failed to parse ssh host");
+                process::exit(1);
+            })
+            .as_str();
 
-        let mut config:Config = match config_file.exists() {
+        let mut config: Config = match config_file.exists() {
             // let config_path = ;
             true => Config::parse(config_file.to_str().unwrap(), ssh_host),
             false => Config {
@@ -72,7 +75,6 @@ impl Config {
     }
 
     pub fn parse(path: &str, host: &str) -> Config {
-
         match Config::parse_config_file(path, host) {
             Ok(config) => config,
             Err(err) => {
@@ -81,7 +83,7 @@ impl Config {
                     ssh_host: host.to_string(),
                     ..Default::default()
                 }
-            },
+            }
         }
     }
 
@@ -90,7 +92,9 @@ impl Config {
         let mut config: HashMap<String, Config> = serde_yaml::from_reader(f)?;
         match config.remove(host) {
             Some(n) => Ok(n),
-            None => Err(From::from("No matching cities with a population were found.")),
+            None => Err(From::from(
+                "No matching cities with a population were found.",
+            )),
         }
     }
 }
@@ -98,49 +102,58 @@ impl Config {
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("Database Importer")
         .about("Import database from remote server")
-        .arg(Arg::new("database")
-           .short('d')
-           .long("database")
-           .help("Target Database")
-           .takes_value(true))
-        .arg(Arg::new("out_file")
-           .short('o')
-           .long("out_file")
-           .help("Output file path")
-           .takes_value(true))
-        .arg(Arg::new("dbuser")
-            .short('u')
-              .long("user")
-            .help("Database username")
-            .takes_value(true))
-        .arg(Arg::new("dbpass")
-            .short('p')
-              .long("password")
-            .help("Database password")
-            .takes_value(true))
-        .arg(Arg::new("extra_args")
-            .short('x')
-              .long("extra-args")
-              .allow_hyphen_values(true)
-            .help("Extra arguments to be passed to mysqldump")
-            .takes_value(true))
+        .arg(
+            Arg::new("database")
+                .short('d')
+                .long("database")
+                .help("Target Database")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("out_file")
+                .short('o')
+                .long("out_file")
+                .help("Output file path")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("dbuser")
+                .short('u')
+                .long("user")
+                .help("Database username")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("dbpass")
+                .short('p')
+                .long("password")
+                .help("Database password")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("extra_args")
+                .short('x')
+                .long("extra-args")
+                .allow_hyphen_values(true)
+                .help("Extra arguments to be passed to mysqldump")
+                .takes_value(true),
+        )
         // .arg(Arg::with_name("dump")
-              // .long("dump")
+        // .long("dump")
         //     .help("dump mode (for remote)")
         //     .required(false)
         //     .takes_value(false))
-        .arg(Arg::new("host")
-            .value_name("user@hostname")
-            .help("SSH Destination")
-            .takes_value(true)
-            .required(true))
-        .arg(Arg::new("table")
-            .multiple_values(true)
-            .required(true))
+        .arg(
+            Arg::new("host")
+                .value_name("user@hostname")
+                .help("SSH Destination")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(Arg::new("table").multiple_values(true).required(true))
         .get_matches();
 
-    let host = match matches.value_of("host")
-    {
+    let host = match matches.value_of("host") {
         Some(n) => n,
         None => {
             eprintln!("Target host cannot be empty");
@@ -150,8 +163,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Config::load(host);
 
-    let tables = match matches.values_of("table")
-    {
+    let tables = match matches.values_of("table") {
         Some(n) => n,
         None => {
             eprintln!("Target tables cannot be empty");
@@ -173,7 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("Using SSH username as database username");
                 config.ssh_user.to_owned()
             }
-        }
+        },
     };
 
     let db_name = match matches.value_of("database") {
@@ -186,7 +198,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("Inferring database name as {}_db", db_user);
                 format!("{}_db", db_user)
             }
-        }
+        },
     };
 
     let db_pass = match matches.value_of("db_pass") {
@@ -197,7 +209,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!("Database password cannot be empty");
                 process::exit(2);
             }
-        }
+        },
     };
 
     //let db_pass = matches.value_of("dbpass").unwrap_or("");
@@ -210,7 +222,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let mut sess = Session::new().unwrap();
-	sess.set_tcp_stream(tcp);
+    sess.set_tcp_stream(tcp);
     sess.handshake().expect("SSH handshake failed");
 
     // Try to authenticate with the first identity in the agent.
@@ -225,17 +237,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         eprint!("Enter password: ");
 
         let ssh_pass = rpassword::read_password().unwrap();
-        sess.userauth_password(&config.ssh_user, &ssh_pass).unwrap_or_else(|_| {
-            eprintln!("Failed to authenticate to remote server");
-            process::exit(1);
-        });
+        sess.userauth_password(&config.ssh_user, &ssh_pass)
+            .unwrap_or_else(|_| {
+                eprintln!("Failed to authenticate to remote server");
+                process::exit(1);
+            });
     } else {
         eprintln!("OK");
     }
 
     let mut remote_temp_file = String::new();
     let mut channel = sess.channel_session().unwrap();
-    channel.exec("mktemp -t 'dbimport_XXXXXXXX.sql.bz2'").unwrap();
+    channel
+        .exec("mktemp -t 'dbimport_XXXXXXXX.sql.bz2'")
+        .unwrap();
     channel.read_to_string(&mut remote_temp_file).unwrap();
     let remote_temp_file = remote_temp_file.trim();
 
@@ -247,25 +262,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     // }).expect("Error setting Ctrl-C handler");
 
     let pass_arg = format!("-p{}", &db_pass);
-    let mut v = vec![
-        "mysqldump",
-        "-u", &db_user,
-        &pass_arg,
-        &db_name,
-    ];
+    let mut v = vec!["mysqldump", "-u", &db_user, &pass_arg, &db_name];
 
     for table in tables {
         v.push(table);
     }
 
-    let v:Vec<String> = v.into_iter().map(|item| {
-        shell_escape::unix::escape(std::borrow::Cow::from(item)).into_owned()
-    }).collect();
-    let arg = format!("{} {} | bzip2 > {}", v.join(" "), extra_args, remote_temp_file);
+    let v: Vec<String> = v
+        .into_iter()
+        .map(|item| shell_escape::unix::escape(std::borrow::Cow::from(item)).into_owned())
+        .collect();
+    let arg = format!(
+        "{} {} | bzip2 > {}",
+        v.join(" "),
+        extra_args,
+        remote_temp_file
+    );
 
     eprint!("Exporting database on target server...");
     let mut channel = sess.channel_session().ok().unwrap();
-    let exit_status = channel.exec(&arg)
+    let exit_status = channel
+        .exec(&arg)
         .and_then(|_| channel.close())
         // .and_then(|_| channel.wait_close())
         .and_then(|_| channel.exit_status());
@@ -281,10 +298,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     eprintln!("OK");
 
-    let (remote_file, stat) = sess.scp_recv(Path::new(&remote_temp_file)).unwrap_or_else(|err| {
-        eprintln!("Failed to download file - {}", err);
-        process::exit(2);
-    });
+    let (remote_file, stat) = sess
+        .scp_recv(Path::new(&remote_temp_file))
+        .unwrap_or_else(|err| {
+            eprintln!("Failed to download file - {}", err);
+            process::exit(2);
+        });
 
     eprintln!("Exported file size: {}", stat.size());
 
@@ -316,7 +335,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut channel = sess.channel_session().ok().unwrap();
     let arg = format!("rm -f {}", remote_temp_file);
-    let exit_status = channel.exec(&arg)
+    let exit_status = channel
+        .exec(&arg)
         .and_then(|_| channel.close())
         .and_then(|_| channel.exit_status());
 
@@ -329,16 +349,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let f = BufReader::new(File::open(&path).unwrap());
 
-    let v = vec![
-        "-u", &db_user,
-        &pass_arg,
-        &db_name
-    ];
+    let v = vec!["-u", &db_user, &pass_arg, &db_name];
     let mut cmd = Command::new("mysql")
-         .args(&v)
-         .stdin(Stdio::piped())
-         .spawn()
-         .expect("Failed to spawn mysql client");
+        .args(&v)
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn mysql client");
 
     if let Some(stdin) = &mut cmd.stdin {
         let mut writer = BufWriter::new(stdin);
@@ -347,7 +363,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         match copy(&mut Box::new(BzDecoder::new(f)), &mut writer) {
             Ok(_) => {
                 eprintln!("Import completed successfully")
-            },
+            }
             Err(err) => {
                 eprintln!("Failed to import database dump - {}", err);
                 process::exit(5);
