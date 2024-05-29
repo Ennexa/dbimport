@@ -7,13 +7,15 @@ extern crate ssh2;
 
 use bzip2::read::BzDecoder;
 use clap::{Arg, Command as App};
+use env_logger::Env;
+use log::{debug, error, info, warn};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{copy, BufReader, BufWriter, Read};
+use std::io::{copy, BufReader, BufWriter, Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process;
@@ -44,13 +46,12 @@ impl Config {
         let ssh_host = cap
             .get(2)
             .unwrap_or_else(|| {
-                eprintln!("Failed to parse ssh host");
+                error!("Failed to parse ssh host");
                 process::exit(1);
             })
             .as_str();
 
         let mut config: Config = match config_file.exists() {
-            // let config_path = ;
             true => Config::parse(config_file.to_str().unwrap(), ssh_host),
             false => Config {
                 ssh_host: ssh_host.to_string(),
@@ -62,7 +63,7 @@ impl Config {
         match cap.get(1) {
             Some(val) => config.ssh_user = val.as_str().to_string(),
             None => {
-                eprintln!("SSH username cannot be empty");
+                error!("SSH username cannot be empty");
                 process::exit(1);
             }
         }
@@ -78,7 +79,7 @@ impl Config {
         match Config::parse_config_file(path, host) {
             Ok(config) => config,
             Err(err) => {
-                eprintln!("Failed to parse config file - {}", err);
+                error!("Failed to parse config file - {}", err);
                 Config {
                     ssh_host: host.to_string(),
                     ..Default::default()
@@ -100,6 +101,11 @@ impl Config {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize the logger with the default environment variable "RUST_LOG"
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .format(|buf, record| writeln!(buf, "[{}] {}", record.level(), record.args()))
+        .init();
+
     let matches = App::new("Database Importer")
         .about("Import database from remote server")
         .arg(
@@ -156,7 +162,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let host = match matches.value_of("host") {
         Some(n) => n,
         None => {
-            eprintln!("Target host cannot be empty");
+            error!("Target host cannot be empty");
             process::exit(1);
         }
     };
@@ -166,7 +172,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let tables = match matches.values_of("table") {
         Some(n) => n,
         None => {
-            eprintln!("Target tables cannot be empty");
+            error!("Target tables cannot be empty");
             process::exit(1);
         }
     };
@@ -182,7 +188,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             None => {
                 // User option was not specified.
                 // Use ssh username, if available
-                eprintln!("Using SSH username as database username");
+                info!("Using SSH username as database username");
                 config.ssh_user.to_owned()
             }
         },
@@ -195,18 +201,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             None => {
                 // User option was not specified.
                 // Use ssh username, if available
-                eprintln!("Inferring database name as {}_db", db_user);
+                info!("Inferring database name as {}_db", db_user);
                 format!("{}_db", db_user)
             }
         },
     };
 
-    let db_pass = match matches.value_of("db_pass") {
+    let db_pass = match matches.value_of("dbpass") {
         Some(val) => val.to_owned(),
         None => match config.db_pass {
             Some(val) => val,
             None => {
-                eprintln!("Database password cannot be empty");
+                error!("Database password cannot be empty");
                 process::exit(2);
             }
         },
@@ -217,7 +223,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Connect to the remote server
     let ssh_host_port = format!("{}:{}", config.ssh_host, config.ssh_port);
     let tcp = TcpStream::connect(&ssh_host_port).unwrap_or_else(|err| {
-        eprintln!("{}", err);
+        error!("{}", err);
         process::exit(1);
     });
 
@@ -226,24 +232,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     sess.handshake().expect("SSH handshake failed");
 
     // Try to authenticate with the first identity in the agent.
-    eprint!("Attept to authenticate with ssh-agent...");
+    info!("Attempt to authenticate with ssh-agent...");
     let _ = sess.userauth_agent(&config.ssh_user);
 
     // Make sure we succeeded
     if !sess.authenticated() {
-        eprintln!("FAILED");
-
-        eprintln!("Falling back to password login");
-        eprint!("Enter password: ");
-
+        warn!("SSH-agent authentication failed. Falling back to password login.");
+        info!("Enter password: ");
         let ssh_pass = rpassword::read_password().unwrap();
         sess.userauth_password(&config.ssh_user, &ssh_pass)
             .unwrap_or_else(|_| {
-                eprintln!("Failed to authenticate to remote server");
+                error!("Failed to authenticate to remote server");
                 process::exit(1);
             });
     } else {
-        eprintln!("OK");
+        info!("SSH-agent authentication succeeded.");
     }
 
     let mut remote_temp_file = String::new();
@@ -253,13 +256,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
     channel.read_to_string(&mut remote_temp_file).unwrap();
     let remote_temp_file = remote_temp_file.trim();
-
-    // ctrlc::set_handler(move || {
-    //     // Handle early termination
-    //     let status = sess.sftp().and_then(|sftp| {
-    //         sftp.unlink(Path::new(remote_temp_file))
-    //     });
-    // }).expect("Error setting Ctrl-C handler");
 
     let pass_arg = format!("-p{}", &db_pass);
     let mut v = vec!["mysqldump", "-u", &db_user, &pass_arg, &db_name];
@@ -279,33 +275,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         remote_temp_file
     );
 
-    eprint!("Exporting database on target server...");
+    info!("Exporting database on target server...");
     let mut channel = sess.channel_session().ok().unwrap();
     let exit_status = channel
         .exec(&arg)
         .and_then(|_| channel.close())
-        // .and_then(|_| channel.wait_close())
         .and_then(|_| channel.exit_status());
 
     match exit_status {
-        Ok(0) => (),
+        Ok(0) => info!("Database export succeeded."),
         _ => {
-            eprintln!("ERR");
-            eprintln!("Failed to export database");
+            error!("Failed to export database");
             process::exit(4);
         }
     }
 
-    eprintln!("OK");
-
     let (remote_file, stat) = sess
         .scp_recv(Path::new(&remote_temp_file))
         .unwrap_or_else(|err| {
-            eprintln!("Failed to download file - {}", err);
+            error!("Failed to download file - {}", err);
             process::exit(2);
         });
 
-    eprintln!("Exported file size: {}", stat.size());
+    info!("Exported file size: {}", stat.size());
 
     let temp_file = Builder::new()
         .suffix(".sql.bz2")
@@ -325,13 +317,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     match copy(&mut remote_file, &mut target) {
         Ok(_) => (),
         Err(err) => {
-            eprintln!("Failed to download exported database dump - {}", err);
+            error!("Failed to download exported database dump - {}", err);
             process::exit(3);
         }
     }
+    debug!("Database dump downloaded to {:?}", path);
 
     progressbar.finish_and_clear();
-    println!("Downloading database dump...OK");
 
     let mut channel = sess.channel_session().ok().unwrap();
     let arg = format!("rm -f {}", remote_temp_file);
@@ -341,8 +333,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .and_then(|_| channel.exit_status());
 
     match exit_status {
-        Ok(0) => eprintln!("Removed temporary file from remote filesystem...OK"),
-        _ => eprintln!("Failed to delete temporary file from remote filesystem"),
+        Ok(0) => info!("Removed temporary file from remote filesystem."),
+        _ => warn!("Failed to delete temporary file from remote filesystem."),
     }
 
     // TODO: Delete temporary file from remote filesystem
@@ -356,35 +348,38 @@ fn main() -> Result<(), Box<dyn Error>> {
         .spawn()
         .expect("Failed to spawn mysql client");
 
+    debug!("Spawning mysql client");
     if let Some(stdin) = &mut cmd.stdin {
         let mut writer = BufWriter::new(stdin);
 
+        debug!("Copying uncompressed dump to mysql client stdin");
         // Decompress and import to local mysql database
         match copy(&mut Box::new(BzDecoder::new(f)), &mut writer) {
-            Ok(_) => {
-                eprintln!("Import completed successfully")
-            }
+            Ok(_) => info!("Database import completed successfully."),
             Err(err) => {
-                eprintln!("Failed to import database dump - {}", err);
+                error!("Failed to import database dump - {}", err);
                 process::exit(5);
             }
         };
     }
 
+    debug!("Waiting for import to complete");
+
     let result = match cmd.try_wait() {
         Ok(Some(status)) => status.code(),
         Ok(None) => cmd.wait().unwrap().code(),
         Err(e) => {
-            eprintln!("error attempting to wait: {}", e);
+            error!("Error attempting to wait: {}", e);
             process::exit(5);
         }
     };
 
+    debug!("Removing temporary file {:?}", path);
     fs::remove_file(path)?;
 
     match result {
         Some(0) => (),
-        n => eprintln!("Import failed with exit code {:?}", n),
+        n => error!("Import failed with exit code {:?}", n),
     };
 
     Ok(())
