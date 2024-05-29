@@ -269,7 +269,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|item| shell_escape::unix::escape(std::borrow::Cow::from(item)).into_owned())
         .collect();
     let arg = format!(
-        "{} {} | bzip2 > {}",
+        "{} {} | tail +2 | bzip2 > {}",
         v.join(" "),
         extra_args,
         remote_temp_file
