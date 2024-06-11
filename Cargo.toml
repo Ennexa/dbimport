@@ -24,8 +24,8 @@ libz-sys = { version = "1.1.12", default-features = false, features = ["libc"] }
 log = "0.4"
 env_logger = "0.9"
 
-[target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
+[target.'cfg(not(windows))'.dependencies]
+openssl = { version = "0.10", features = [ "vendored" ] }
 
 [profile.release]
 lto = true
