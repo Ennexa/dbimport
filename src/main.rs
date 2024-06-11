@@ -279,7 +279,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut channel = sess.channel_session().ok().unwrap();
     let exit_status = channel
         .exec(&arg)
-        .and_then(|_| channel.close())
+        .and_then(|_| {
+            let mut stdout = String::new();
+            let mut stderr = String::new();
+            channel.read_to_string(&mut stdout).unwrap();
+            channel.stderr().read_to_string(&mut stderr).unwrap();
+
+            channel.wait_close()
+        })
         .and_then(|_| channel.exit_status());
 
     match exit_status {
@@ -336,8 +343,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(0) => info!("Removed temporary file from remote filesystem."),
         _ => warn!("Failed to delete temporary file from remote filesystem."),
     }
-
-    // TODO: Delete temporary file from remote filesystem
 
     let f = BufReader::new(File::open(&path).unwrap());
 
