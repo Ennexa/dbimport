@@ -88,11 +88,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        override: true
-        profile: minimal
         components: rustfmt
     - name: Check formatting
       run: |
